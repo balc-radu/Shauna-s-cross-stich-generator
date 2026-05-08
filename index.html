@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Just-a-girl yapping sesh ~ Generator de modele cross stitch</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <div class="header-brand">
+            <img src="sheepy.jpg" alt="Oița noastră" class="logo-sheep" id="logo-sheep">
+            <div>
+                <h1>Just-a-girl yapping sesh</h1>
+            </div>
+        </div>
+    </header>
+
+    <!-- Floating sheep that follows you around -->
+    <div class="floating-sheep" id="floating-sheep">
+        <img src="sheepy.jpg" alt="baa" class="sheep-float-img">
+        <div class="sheep-speech" id="sheep-speech"></div>
+    </div>
+
+    <main>
+        <!-- Step Indicator -->
+        <nav class="steps-nav">
+            <div class="step-indicator active" data-step="1">
+                <span class="step-number">1</span>
+                <span class="step-label">Imagine</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step-indicator" data-step="2">
+                <span class="step-number">2</span>
+                <span class="step-label">Setari</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step-indicator" data-step="3">
+                <span class="step-number">3</span>
+                <span class="step-label">Preview</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step-indicator" data-step="4">
+                <span class="step-number">4</span>
+                <span class="step-label">Model</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step-indicator" data-step="5">
+                <span class="step-number">5</span>
+                <span class="step-label">Export</span>
+            </div>
+        </nav>
+
+        <!-- Step 1: Upload -->
+        <section class="step-panel active" id="step-1">
+            <h2>Incarca imaginea ta</h2>
+            <div class="upload-area" id="upload-area">
+                <div class="upload-placeholder" id="upload-placeholder">
+                    <img src="sheepy.jpg" alt="Oița" class="upload-sheep-icon">
+                    <p>Trage si plaseaza o imagine aici</p>
+                    <p class="upload-hint">sau click pentru a alege un fisier</p>
+                    <p class="upload-formats">Accepta JPG, PNG, BMP, WebP</p>
+                </div>
+                <img id="image-preview" class="image-preview hidden" alt="Previzualizare">
+                <input type="file" id="file-input" accept="image/*" hidden>
+            </div>
+            <div class="step-actions">
+                <button class="btn btn-secondary" id="btn-change-image" style="display:none">Schimba imaginea</button>
+                <button class="btn btn-primary" id="btn-to-step2" disabled>Urmatorul: Configurare</button>
+            </div>
+        </section>
+
+        <!-- Step 2: Configure -->
+        <section class="step-panel" id="step-2">
+            <h2>Configureaza modelul</h2>
+            <div class="config-grid">
+                <div class="config-card">
+                    <h3>Dimensiune model</h3>
+                    <div class="form-group">
+                        <label for="width-cm">Latime (cm)</label>
+                        <input type="number" id="width-cm" min="5" max="200" value="20" step="0.5">
+                    </div>
+                    <div class="form-group">
+                        <label for="height-cm">Inaltime (cm)</label>
+                        <input type="number" id="height-cm" min="5" max="200" value="" step="0.5" disabled>
+                        <small class="form-hint">Calculat automat din raportul de aspect</small>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="lock-dimension" checked>
+                            Fixeaza latimea (calculeaza automat inaltimea)
+                        </label>
+                    </div>
+                </div>
+
+                <div class="config-card">
+                    <h3>Tesatura</h3>
+                    <div class="form-group">
+                        <label for="fabric-count">Densitate tesatura (Aida)</label>
+                        <select id="fabric-count">
+                            <option value="11">11-count Aida</option>
+                            <option value="14" selected>14-count Aida (cel mai folosit)</option>
+                            <option value="16">16-count Aida</option>
+                            <option value="18">18-count Aida</option>
+                            <option value="22">22-count Aida</option>
+                            <option value="28">28-count Evenweave (peste 2)</option>
+                        </select>
+                    </div>
+                    <div class="stitch-info">
+                        <div class="info-row">
+                            <span>Dimensiune grila:</span>
+                            <strong id="grid-size-display">110 x 110 cusaturi</strong>
+                        </div>
+                        <div class="info-row">
+                            <span>Total cusaturi:</span>
+                            <strong id="total-stitches-display">12.100</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="config-card">
+                    <h3>Culori</h3>
+                    <div class="form-group">
+                        <label for="max-colors">Numar maxim de culori: <strong id="color-count-display">15</strong></label>
+                        <input type="range" id="max-colors" min="2" max="50" value="15">
+                    </div>
+                    <p class="form-hint">Mai putine culori = model mai simplu. Mai multe culori = mai mult detaliu.</p>
+                </div>
+            </div>
+            <div class="step-actions">
+                <button class="btn btn-secondary" id="btn-back-to-1">Inapoi</button>
+                <button class="btn btn-primary" id="btn-to-step3">Genereaza previzualizare</button>
+            </div>
+        </section>
+
+        <!-- Step 3: Preview -->
+        <section class="step-panel" id="step-3">
+            <h2>Previzualizare model</h2>
+            <div id="processing-indicator" class="processing hidden">
+                <div class="sheep-loader">
+                    <img src="sheepy.jpg" alt="loading" class="sheep-bounce">
+                </div>
+                <p id="processing-text">Oita noastra lucreaza din greu la modelul tau...</p>
+            </div>
+            <div class="preview-layout">
+                <div class="preview-container">
+                    <canvas id="preview-canvas"></canvas>
+                </div>
+                <div class="preview-info">
+                    <h3>Sumar model</h3>
+                    <div id="preview-summary"></div>
+                    <h3>Lista de ate</h3>
+                    <div id="preview-thread-list" class="thread-list"></div>
+                </div>
+            </div>
+            <div class="step-actions">
+                <button class="btn btn-secondary" id="btn-back-to-2">Inapoi: Ajusteaza setarile</button>
+                <button class="btn btn-primary" id="btn-to-step4">Vezi modelul complet</button>
+            </div>
+        </section>
+
+        <!-- Step 4: Full Pattern -->
+        <section class="step-panel" id="step-4">
+            <h2>Modelul complet</h2>
+            <div class="pattern-toolbar">
+                <div class="view-modes">
+                    <button class="btn btn-small active" id="view-combined" data-view="combined">Combinat</button>
+                    <button class="btn btn-small" id="view-color" data-view="color">Doar culori</button>
+                    <button class="btn btn-small" id="view-symbol" data-view="symbol">Doar simboluri</button>
+                </div>
+                <div class="zoom-controls">
+                    <button class="btn btn-small" id="zoom-out">-</button>
+                    <span id="zoom-level">100%</span>
+                    <button class="btn btn-small" id="zoom-in">+</button>
+                    <button class="btn btn-small" id="zoom-fit">Potrivire</button>
+                </div>
+            </div>
+            <div class="pattern-layout">
+                <div class="pattern-canvas-wrapper" id="pattern-canvas-wrapper">
+                    <canvas id="pattern-canvas"></canvas>
+                </div>
+                <div class="legend-panel" id="legend-panel">
+                    <h3>Legenda</h3>
+                    <div id="legend-content" class="thread-list"></div>
+                </div>
+            </div>
+            <div class="step-actions">
+                <button class="btn btn-secondary" id="btn-back-to-3">Inapoi</button>
+                <button class="btn btn-primary" id="btn-to-step5">Exporta</button>
+            </div>
+        </section>
+
+        <!-- Step 5: Export -->
+        <section class="step-panel" id="step-5">
+            <h2>Exporta modelul tau</h2>
+            <div class="export-options">
+                <div class="export-card" id="export-pdf">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                    <h3>Descarca PDF</h3>
+                    <p>Model complet cu grila, legenda si lista de ate. Gata de tiparit pe hartie A4.</p>
+                    <button class="btn btn-primary" id="btn-download-pdf">Descarca PDF</button>
+                </div>
+                <div class="export-card" id="export-png">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                    <h3>Descarca PNG</h3>
+                    <p>Imagine de inalta rezolutie a grilei modelului. Buna pentru vizualizare digitala.</p>
+                    <button class="btn btn-primary" id="btn-download-png">Descarca PNG</button>
+                </div>
+            </div>
+            <div id="export-progress" class="processing hidden">
+                <div class="sheep-loader">
+                    <img src="sheepy.jpg" alt="loading" class="sheep-bounce">
+                </div>
+                <p id="export-text">Oita impacheteaza modelul tau...</p>
+            </div>
+            <div class="step-actions">
+                <button class="btn btn-secondary" id="btn-back-to-4">Inapoi la model</button>
+                <button class="btn btn-primary" id="btn-start-over">Incepe din nou</button>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Just-a-girl yapping sesh</p>
+    </footer>
+
+    <script src="js/dmc-colors.js"></script>
+    <script src="js/color-quantization.js"></script>
+    <script src="js/pattern-engine.js"></script>
+    <script src="js/pattern-renderer.js"></script>
+    <script src="js/pdf-export.js"></script>
+    <script src="js/sheep-vibes.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
