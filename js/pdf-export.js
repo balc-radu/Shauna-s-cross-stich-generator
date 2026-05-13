@@ -45,7 +45,7 @@ const PdfExport = (() => {
     }
 
     /**
-     * Render the pattern grid to an offscreen canvas (color fill only, no symbols).
+     * Render the pattern grid to an offscreen canvas: color fill + symbol per cell.
      * Returns a data URL.
      */
     function renderGridToCanvas(pattern, pxPerCell) {
@@ -54,11 +54,25 @@ const PdfExport = (() => {
         canvas.height = pattern.height * pxPerCell;
         const ctx = canvas.getContext('2d');
 
+        const fontSize = Math.max(5, Math.floor(pxPerCell * 0.62));
+        ctx.font = `bold ${fontSize}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
         for (let y = 0; y < pattern.height; y++) {
             for (let x = 0; x < pattern.width; x++) {
                 const entry = pattern.palette[pattern.grid[y][x]];
+                const cx = x * pxPerCell;
+                const cy = y * pxPerCell;
+
+                // Color fill
                 ctx.fillStyle = `rgb(${entry.dmc.r},${entry.dmc.g},${entry.dmc.b})`;
-                ctx.fillRect(x * pxPerCell, y * pxPerCell, pxPerCell, pxPerCell);
+                ctx.fillRect(cx, cy, pxPerCell, pxPerCell);
+
+                // Symbol — black on light colors, white on dark
+                const brightness = (entry.dmc.r * 299 + entry.dmc.g * 587 + entry.dmc.b * 114) / 1000;
+                ctx.fillStyle = brightness > 128 ? '#000000' : '#ffffff';
+                ctx.fillText(entry.symbol, cx + pxPerCell / 2, cy + pxPerCell / 2);
             }
         }
 
@@ -130,8 +144,8 @@ const PdfExport = (() => {
         doc.text(infoLine, margin, margin + 19);
         doc.setTextColor(0, 0, 0);
 
-        // Grid image
-        const pxPerCell = 8;
+        // Grid image — 12px per cell gives enough room for readable symbols
+        const pxPerCell = 12;
         const gridDataUrl = renderGridToCanvas(pattern, pxPerCell);
         doc.addImage(gridDataUrl, 'PNG', gridOriginX, gridOriginY, gridW_mm, gridH_mm);
 
