@@ -1,7 +1,7 @@
 /**
  * PDF Export
- * Generates a multi-page PDF with cover, legend, and grid pages.
- * Uses jsPDF loaded from CDN. Includes sheep jokes between sections.
+ * Generates a single custom-sized page with header, grid, and legend.
+ * Uses jsPDF loaded from CDN. Includes sheep jokes because of course it does.
  */
 
 const PdfExport = (() => {
@@ -43,276 +43,224 @@ const PdfExport = (() => {
         });
     }
 
-    async function generatePDF(pattern, patternName) {
-        await loadJsPDF();
-
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-        const pageW = 210;
-        const pageH = 297;
-        const margin = 15;
-        const usableW = pageW - margin * 2;
-        const usableH = pageH - margin * 2;
-
-        // ===== COVER PAGE =====
-        doc.setFontSize(22);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Just-a-girl yapping sesh', pageW / 2, 30, { align: 'center' });
-
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'normal');
-        doc.text('Model Cross Stitch', pageW / 2, 42, { align: 'center' });
-
-        if (patternName) {
-            doc.setFontSize(12);
-            doc.text(patternName, pageW / 2, 52, { align: 'center' });
-        }
-
-        // Pattern preview image
-        const previewCanvas = document.createElement('canvas');
-        const previewScale = Math.min(140 / pattern.width, 120 / pattern.height);
-        previewCanvas.width = pattern.width * previewScale;
-        previewCanvas.height = pattern.height * previewScale;
-        const pCtx = previewCanvas.getContext('2d');
+    /**
+     * Render the pattern grid to an offscreen canvas (color fill only, no symbols).
+     * Returns a data URL.
+     */
+    function renderGridToCanvas(pattern, pxPerCell) {
+        const canvas = document.createElement('canvas');
+        canvas.width = pattern.width * pxPerCell;
+        canvas.height = pattern.height * pxPerCell;
+        const ctx = canvas.getContext('2d');
 
         for (let y = 0; y < pattern.height; y++) {
             for (let x = 0; x < pattern.width; x++) {
                 const entry = pattern.palette[pattern.grid[y][x]];
-                pCtx.fillStyle = `rgb(${entry.dmc.r},${entry.dmc.g},${entry.dmc.b})`;
-                pCtx.fillRect(x * previewScale, y * previewScale, previewScale, previewScale);
+                ctx.fillStyle = `rgb(${entry.dmc.r},${entry.dmc.g},${entry.dmc.b})`;
+                ctx.fillRect(x * pxPerCell, y * pxPerCell, pxPerCell, pxPerCell);
             }
         }
 
-        const previewDataUrl = previewCanvas.toDataURL('image/png');
-        const imgW = Math.min(usableW, previewCanvas.width * 0.5);
-        const imgH = imgW * (previewCanvas.height / previewCanvas.width);
-        doc.addImage(previewDataUrl, 'PNG', (pageW - imgW) / 2, 62, imgW, imgH);
+        return canvas.toDataURL('image/png');
+    }
 
-        // Pattern info
-        let infoY = 62 + imgH + 15;
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
+    async function generatePDF(pattern, patternName) {
+        await loadJsPDF();
+
+        const { jsPDF } = window.jspdf;
+
+        // ---- Layout constants (mm) ----
+        const margin = 12;
+        const headerH = 22;       // space for title + info line
+        const footerH = 8;        // space for sheep joke
+        const legendW = 72;       // right column width
+        const gap = 6;            // gap between grid and legend
+
+        // Cell size: target 3mm per cell, but cap page width at ~500mm and height at ~700mm
+        const maxGridW = 480 - margin * 2 - gap - legendW;
+        const maxGridH = 680 - headerH - footerH - margin * 2;
+        const cellMm = Math.max(
+            1.5,
+            Math.min(3, maxGridW / pattern.width, maxGridH / pattern.height)
+        );
+
+        const gridW_mm = pattern.width * cellMm;
+        const gridH_mm = pattern.height * cellMm;
+
+        const pageW = margin + gridW_mm + gap + legendW + margin;
+        const pageH = margin + headerH + gridH_mm + footerH + margin;
+
+        const doc = new jsPDF({
+            orientation: pageW > pageH ? 'landscape' : 'portrait',
+            unit: 'mm',
+            format: [pageW, pageH]
+        });
+
+        const gridOriginX = margin;
+        const gridOriginY = margin + headerH;
+
+        // ===== HEADER =====
+        doc.setFontSize(13);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(0, 0, 0);
+        doc.text('Just-a-girl yapping sesh', margin, margin + 7);
+
+        if (patternName) {
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text(patternName, margin, margin + 13);
+        }
 
         const colorCount = pattern.palette.filter(p => p.stitchCount > 0).length;
         const totalSkeins = pattern.palette.reduce((sum, p) => sum + p.skeins, 0);
 
-        const infoLines = [
-            `Dimensiuni: ${pattern.widthCm} x ${pattern.heightCm} cm`,
-            `Grila: ${pattern.width} x ${pattern.height} cusaturi`,
-            `Total cusaturi: ${pattern.totalStitches.toLocaleString()}`,
-            `Tesatura: ${pattern.fabricCount}-count Aida`,
-            `Culori: ${colorCount} ate DMC`,
-            `Sculuri estimate: ~${totalSkeins.toFixed(1)}`,
-            `Generat: ${new Date().toLocaleDateString('ro-RO')}`
-        ];
-
-        for (const line of infoLines) {
-            doc.text(line, pageW / 2, infoY, { align: 'center' });
-            infoY += 6;
-        }
-
-        // Sheep joke on cover
-        infoY += 8;
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'italic');
-        doc.setTextColor(150, 100, 120);
-        doc.text(randomSheepJoke(), pageW / 2, infoY, { align: 'center' });
+        doc.setFontSize(7.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(80, 80, 80);
+        const infoLine = [
+            `${pattern.widthCm} x ${pattern.heightCm} cm`,
+            `${pattern.width} x ${pattern.height} cusaturi`,
+            `Total: ${pattern.totalStitches.toLocaleString()} cusaturi`,
+            `${pattern.fabricCount}-count Aida`,
+            `${colorCount} culori DMC`,
+            `~${totalSkeins.toFixed(1)} sculuri`,
+            new Date().toLocaleDateString('ro-RO')
+        ].join('   |   ');
+        doc.text(infoLine, margin, margin + 19);
         doc.setTextColor(0, 0, 0);
 
-        // ===== LEGEND PAGE =====
-        doc.addPage();
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Lista de ate / Legenda', margin, margin + 5);
+        // ===== GRID IMAGE =====
+        // Use 8px per cell for crisp rendering at typical pattern sizes
+        const pxPerCell = 8;
+        const gridDataUrl = renderGridToCanvas(pattern, pxPerCell);
+        doc.addImage(gridDataUrl, 'PNG', gridOriginX, gridOriginY, gridW_mm, gridH_mm);
 
-        let legendY = margin + 15;
-        const rowH = 7;
-        const swatchSize = 5;
+        // ===== VECTOR GRID LINES =====
+        // Minor lines every cell
+        doc.setLineWidth(0.06);
+        doc.setDrawColor(160, 160, 160);
 
-        // Header
-        doc.setFontSize(8);
+        for (let gx = 0; gx <= pattern.width; gx++) {
+            const isMajor = gx % 10 === 0;
+            if (!isMajor) {
+                const cx = gridOriginX + gx * cellMm;
+                doc.line(cx, gridOriginY, cx, gridOriginY + gridH_mm);
+            }
+        }
+        for (let gy = 0; gy <= pattern.height; gy++) {
+            const isMajor = gy % 10 === 0;
+            if (!isMajor) {
+                const cy = gridOriginY + gy * cellMm;
+                doc.line(gridOriginX, cy, gridOriginX + gridW_mm, cy);
+            }
+        }
+
+        // Major lines every 10 cells
+        doc.setLineWidth(0.25);
+        doc.setDrawColor(60, 60, 60);
+
+        for (let gx = 0; gx <= pattern.width; gx += 10) {
+            const cx = gridOriginX + gx * cellMm;
+            doc.line(cx, gridOriginY, cx, gridOriginY + gridH_mm);
+        }
+        for (let gy = 0; gy <= pattern.height; gy += 10) {
+            const cy = gridOriginY + gy * cellMm;
+            doc.line(gridOriginX, cy, gridOriginX + gridW_mm, cy);
+        }
+
+        // Outer border
+        doc.setLineWidth(0.4);
+        doc.setDrawColor(30, 30, 30);
+        doc.rect(gridOriginX, gridOriginY, gridW_mm, gridH_mm);
+
+        // Grid coordinate labels (every 10)
+        doc.setFontSize(4.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(120, 120, 120);
+
+        for (let gx = 10; gx <= pattern.width; gx += 10) {
+            const cx = gridOriginX + gx * cellMm;
+            doc.text(gx.toString(), cx, gridOriginY - 1, { align: 'center' });
+        }
+        for (let gy = 10; gy <= pattern.height; gy += 10) {
+            const cy = gridOriginY + gy * cellMm;
+            doc.text(gy.toString(), gridOriginX - 1.2, cy + 1.2, { align: 'right' });
+        }
+
+        // ===== LEGEND (right column) =====
+        const legendX = gridOriginX + gridW_mm + gap;
+        let legendY = gridOriginY;
+
+        doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
-        doc.text('Simbol', margin, legendY);
-        doc.text('Culoare', margin + 12, legendY);
-        doc.text('Cod DMC', margin + 20, legendY);
-        doc.text('Nume', margin + 45, legendY);
-        doc.text('Cusaturi', margin + 120, legendY);
-        doc.text('Sculuri', margin + 150, legendY);
-        legendY += 3;
+        doc.setTextColor(0, 0, 0);
+        doc.text('Legenda / Lista de ate', legendX, legendY + 4);
+        legendY += 8;
+
+        // Column headers
+        doc.setFontSize(6.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(80, 80, 80);
+        doc.text('Sim', legendX, legendY);
+        doc.text('Culoare', legendX + 7, legendY);
+        doc.text('Cod', legendX + 17, legendY);
+        doc.text('Nume', legendX + 29, legendY);
+        doc.text('Cus.', legendX + 55, legendY);
+        doc.text('Scul', legendX + 64, legendY);
+        legendY += 2;
+
         doc.setDrawColor(150);
-        doc.line(margin, legendY, pageW - margin, legendY);
-        legendY += 4;
+        doc.setLineWidth(0.15);
+        doc.line(legendX, legendY, legendX + legendW - 4, legendY);
+        legendY += 3.5;
+
+        const activePalette = pattern.palette.filter(p => p.stitchCount > 0);
+        const rowH = 5;
+        const swatchSz = 3.5;
+        const maxLegendY = gridOriginY + gridH_mm - 2;
 
         doc.setFont('helvetica', 'normal');
 
-        const activePalette = pattern.palette.filter(p => p.stitchCount > 0);
-
         for (const entry of activePalette) {
-            if (legendY > pageH - margin - 10) {
-                doc.addPage();
-                legendY = margin + 10;
-            }
+            if (legendY + rowH > maxLegendY) break; // clip if pattern is very tall
+
+            // Symbol
+            doc.setFontSize(6);
+            doc.setFont('courier', 'bold');
+            doc.setTextColor(0, 0, 0);
+            doc.text(entry.symbol, legendX + 1, legendY + 3);
 
             // Color swatch
             doc.setFillColor(entry.dmc.r, entry.dmc.g, entry.dmc.b);
-            doc.rect(margin + 12, legendY - swatchSize + 1, swatchSize, swatchSize, 'F');
+            doc.rect(legendX + 7, legendY + 0.3, swatchSz, swatchSz, 'F');
             doc.setDrawColor(100);
-            doc.rect(margin + 12, legendY - swatchSize + 1, swatchSize, swatchSize, 'S');
+            doc.setLineWidth(0.1);
+            doc.rect(legendX + 7, legendY + 0.3, swatchSz, swatchSz, 'S');
 
-            doc.setFontSize(9);
-            doc.setFont('courier', 'bold');
-            doc.text(entry.symbol, margin + 3, legendY);
+            // Text
+            doc.setFontSize(5.5);
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
-            doc.text(entry.dmc.code, margin + 22, legendY);
-            doc.text(entry.dmc.name, margin + 45, legendY);
-            doc.text(entry.stitchCount.toLocaleString(), margin + 120, legendY);
-            doc.text(entry.skeins.toFixed(1), margin + 150, legendY);
+            doc.setTextColor(0, 0, 0);
+            doc.text(String(entry.dmc.code), legendX + 17, legendY + 3);
+
+            const nameStr = entry.dmc.name.length > 18
+                ? entry.dmc.name.substring(0, 17) + '…'
+                : entry.dmc.name;
+            doc.text(nameStr, legendX + 29, legendY + 3);
+            doc.text(entry.stitchCount.toLocaleString(), legendX + 55, legendY + 3);
+            doc.text(entry.skeins.toFixed(1), legendX + 64, legendY + 3);
 
             legendY += rowH;
         }
 
-        // Sheep joke after legend
-        legendY += 5;
-        if (legendY < pageH - margin - 15) {
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'italic');
-            doc.setTextColor(150, 100, 120);
-            doc.text(randomSheepJoke(), pageW / 2, legendY, { align: 'center' });
-            doc.setTextColor(0, 0, 0);
-        }
+        // ===== SHEEP JOKE (footer) =====
+        const footerY = pageH - margin - 1;
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(180, 100, 130);
+        doc.text(randomSheepJoke(), pageW / 2, footerY, { align: 'center' });
 
-        // ===== GRID PAGES =====
-        const cellSizeMm = 4; // Increased from 3 to 4mm for better symbol readability
-        const cellsPerPageW = Math.floor(usableW / cellSizeMm);
-        const cellsPerPageH = Math.floor((usableH - 14) / cellSizeMm);
-
-        const pagesX = Math.ceil(pattern.width / cellsPerPageW);
-        const pagesY = Math.ceil(pattern.height / cellsPerPageH);
-        const totalGridPages = pagesX * pagesY;
-
-        for (let py = 0; py < pagesY; py++) {
-            for (let px = 0; px < pagesX; px++) {
-                doc.addPage();
-
-                const startX = px * cellsPerPageW;
-                const startY = py * cellsPerPageH;
-                const endX = Math.min(startX + cellsPerPageW, pattern.width);
-                const endY = Math.min(startY + cellsPerPageH, pattern.height);
-                const cols = endX - startX;
-                const rows = endY - startY;
-
-                const pageNum = py * pagesX + px + 1;
-
-                // Page header
-                doc.setFontSize(8);
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(0, 0, 0);
-                doc.text(
-                    `Sectiunea [${startX + 1}-${endX}] x [${startY + 1}-${endY}]  (Pagina ${pageNum} din ${totalGridPages})`,
-                    margin, margin + 3
-                );
-
-                // Small sheep joke in header
-                doc.setFontSize(6);
-                doc.setFont('helvetica', 'italic');
-                doc.setTextColor(180, 130, 150);
-                doc.text(randomSheepJoke(), pageW - margin, margin + 3, { align: 'right' });
-                doc.setTextColor(0, 0, 0);
-
-                const gridOriginX = margin + 6; // leave room for row numbers
-                const gridOriginY = margin + 10;
-
-                // Draw cells with symbols
-                for (let gy = 0; gy < rows; gy++) {
-                    for (let gx = 0; gx < cols; gx++) {
-                        const paletteIdx = pattern.grid[startY + gy][startX + gx];
-                        const entry = pattern.palette[paletteIdx];
-
-                        const cx = gridOriginX + gx * cellSizeMm;
-                        const cy = gridOriginY + gy * cellSizeMm;
-
-                        // Fill with color
-                        doc.setFillColor(entry.dmc.r, entry.dmc.g, entry.dmc.b);
-                        doc.rect(cx, cy, cellSizeMm, cellSizeMm, 'F');
-
-                        // Symbol - use Courier which handles ASCII well
-                        const brightness = (entry.dmc.r * 299 + entry.dmc.g * 587 + entry.dmc.b * 114) / 1000;
-                        if (brightness > 128) {
-                            doc.setTextColor(0, 0, 0);
-                        } else {
-                            doc.setTextColor(255, 255, 255);
-                        }
-                        doc.setFontSize(6);
-                        doc.setFont('courier', 'bold');
-                        doc.text(
-                            entry.symbol,
-                            cx + cellSizeMm / 2,
-                            cy + cellSizeMm * 0.7,
-                            { align: 'center' }
-                        );
-                    }
-                }
-
-                // Reset text color for grid lines
-                doc.setTextColor(0, 0, 0);
-
-                // Draw grid lines
-                doc.setDrawColor(180);
-                doc.setLineWidth(0.1);
-
-                for (let gx = 0; gx <= cols; gx++) {
-                    const cx = gridOriginX + gx * cellSizeMm;
-                    const isMajor = (startX + gx) % 10 === 0;
-                    if (isMajor) {
-                        doc.setDrawColor(60);
-                        doc.setLineWidth(0.3);
-                    } else {
-                        doc.setDrawColor(180);
-                        doc.setLineWidth(0.1);
-                    }
-                    doc.line(cx, gridOriginY, cx, gridOriginY + rows * cellSizeMm);
-                }
-
-                for (let gy = 0; gy <= rows; gy++) {
-                    const cy = gridOriginY + gy * cellSizeMm;
-                    const isMajor = (startY + gy) % 10 === 0;
-                    if (isMajor) {
-                        doc.setDrawColor(60);
-                        doc.setLineWidth(0.3);
-                    } else {
-                        doc.setDrawColor(180);
-                        doc.setLineWidth(0.1);
-                    }
-                    doc.line(gridOriginX, cy, gridOriginX + cols * cellSizeMm, cy);
-                }
-
-                // Row/column numbers at major gridlines
-                doc.setTextColor(100, 100, 100);
-                doc.setFontSize(5);
-                doc.setFont('helvetica', 'normal');
-
-                for (let gx = 0; gx <= cols; gx += 10) {
-                    const num = startX + gx;
-                    if (num > 0) {
-                        doc.text(num.toString(), gridOriginX + gx * cellSizeMm, gridOriginY - 1.5, { align: 'center' });
-                    }
-                }
-
-                for (let gy = 0; gy <= rows; gy += 10) {
-                    const num = startY + gy;
-                    if (num > 0) {
-                        doc.text(num.toString(), gridOriginX - 1.5, gridOriginY + gy * cellSizeMm + 1, { align: 'right' });
-                    }
-                }
-
-                // Reset text color
-                doc.setTextColor(0, 0, 0);
-            }
-        }
-
-        // Save
+        // ===== SAVE =====
         const filename = (patternName || 'model-cross-stitch')
             .replace(/[^a-z0-9]/gi, '-')
             .toLowerCase();
